@@ -1,0 +1,5 @@
+# PHP Info Page
+    - name: Sets Up PHP Info Page
+      template:
+        src: "templates/info.php.j2"
+        dest: "/var/www/{{ http_host }}/info.php"

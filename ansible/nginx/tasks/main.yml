@@ -1,0 +1,13 @@
+---
+     - name: check status of nginx
+       service:
+        name: nginx
+        state: stopped
+       register: nginx_status
+       when: http_server == "apache2"
+
+
+     - name: Print nginx service status
+       debug:
+         msg: "nginx service is {{ 'started' if nginx_status.status == 'started' else 'stopped' }}"
+       when: http_server == "apache2"

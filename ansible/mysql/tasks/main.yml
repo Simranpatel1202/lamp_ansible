@@ -1,0 +1,42 @@
+---
+
+  # MySQL Configuration
+    - name: Check if a custom root password is specified
+      debug:
+        msg: >
+          Warning!! the Mysql root password was left empty. Please set a custom
+          password with role variable mysql_root_password to secure your database
+          server!
+      when: not mysql_root_password
+      tags: mysql
+
+
+
+# This command will exit non-zero when the root password was set previously
+    - name: Check if root password is unset
+      shell: >
+        mysql -u root
+        -p'{{ mysql_root_password }}'
+        -e "quit"
+      changed_when: false
+      ignore_errors: true
+      register: root_pwd_check
+      tags: mysql
+
+    # Repeat runs with the same password can continue idempotently, otherwise fail.
+    - name: Check if the specified root password is already set
+      shell: >
+        mysql -u root -p{{ mysql_root_password }} status
+      changed_when: false
+      no_log: true
+      when: root_pwd_check.rc != 0
+      tags: mysql
+
+     # - name: Check for previously set unix_socket in plugin column
+    #   command: >
+    #     mysql -N -s -S {{ mariadb_socket }} -u root -e
+    #     "SELECT plugin from mysql.user WHERE user = 'root'"
+    #   register: plugin_root_result
+    #   changed_when: plugin_root_result.stdout is search('unix_socket')
+    #   when: root_pwd_check.rc == 0
+    #   tags: mysql
