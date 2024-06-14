@@ -1,0 +1,33 @@
+- name: install mysql
+  hosts: localhost
+  become: true
+  tasks:
+   - name: install mysql 
+     apt:
+      name: 
+        - mysql-server
+        - mysql-client
+        - pkg-config
+      state: present
+
+  #  - name: install pymysql
+  #    pip: 
+  #     name: mysqlclient
+
+   - name: start mysql service
+     service:
+      name: mysql
+      state: started
+      enabled: yes
+
+   - name: Ensure MySQL database is present
+     mysql_db:
+      name: "root"
+      state: present
+      login_unix_socket: /var/run/mysqld/mysqld.sock
+
+   - name: Creating a new database
+     mysql_db: name=firstdb state=present
+
+   - name: Create a database user
+     mysql_user: name=simran password=simran11 priv=*.*:ALL host='localhost' state=present

@@ -1,0 +1,11 @@
+- name: install apache
+  hosts: localhost
+  become: true
+  tasks:
+   - name: install apache2
+     apt:
+      name: apache2
+
+   - name: ensure apache is running
+     ansible.builtin.debug:
+      msg: Hello world

@@ -1,0 +1,208 @@
+---
+- hosts: all
+  become: yes
+  vars_files:
+    - vars/default.yml
+  tasks:
+    - name: "Install prerequisites"
+      apt: 
+        name: '{{ item }}'
+        state: latest
+      loop: 
+        - aptitude
+
+
+  #Apache Configuration
+    
+    - name: Install LAMP Packages
+      apt: 
+        name: "{{ item }}" 
+        state: latest
+      loop: 
+        - mysql-server 
+        - php 
+        - php-mysql
+
+    - name: check status of nginx
+      service:
+        name: nginx
+        state: stopped
+      register: nginx_status
+      when: http_server == "apache2"
+
+    - name: Print nginx service status
+      debug:
+          msg: "nginx service is {{ 'started' if nginx_status.status == 'started' else 'stopped' }}"
+      when: http_server == "apache2"
+
+    - name: Install LAMP Packages
+      apt: 
+        name: "{{ item }}" 
+        state: latest
+      loop:
+        - apache2
+      when: http_server == "apache2"
+
+    - name: Install pyMySQL
+      pip:
+        name: pymysql
+        state: present
+      ignore_errors: True
+
+
+    - name: Create document root
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: '0755'
+      
+    - name: Set up Apache virtualhost
+      template:
+        src: "files/apache.conf.j2"
+        dest: "/etc/apache2/sites-available/{{ http_conf }}"
+      notify: Reload Apache
+      when: http_server == "apache2"
+
+    - name: Enable new site
+      shell: /usr/sbin/a2ensite {{ http_conf }}
+      notify: Reload Apache
+      when: http_server == "apache2"
+
+    - name: Disable default Apache site
+      shell: /usr/sbin/a2dissite 000-default.conf
+      when: disable_default
+      notify: Reload Apache
+    
+
+  # MySQL Configuration
+
+    - name: Check if a custom root password is specified
+      debug:
+        msg: >
+          Warning!! the Mysql root password was left empty. Please set a custom
+          password with role variable mysql_root_password to secure your database
+          server!
+      when: not mysql_root_password
+      tags: mysql
+
+
+# This command will exit non-zero when the root password was set previously
+    - name: Check if root password is unset
+      shell: >
+        mysql -u root
+        -p'{{ mysql_root_password }}'
+        -e "quit"
+      changed_when: false
+      ignore_errors: true
+      register: root_pwd_check
+      tags: mysql
+
+
+# Repeat runs with the same password can continue idempotently, otherwise fail.
+    - name: Check if the specified root password is already set
+      shell: >
+        mysql -u root -p{{ mysql_root_password }} status
+      changed_when: false
+      no_log: true
+      when: root_pwd_check.rc != 0
+      tags: mysql
+
+      
+    - name: Set Mysql root password for the first time (root@localhost)
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        host: localhost
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: present
+      when: root_pwd_check.rc != 0
+      tags: mysql
+
+
+
+
+
+
+    # - name: Check for previously set unix_socket in plugin column
+    #   command: >
+    #     mysql -N -s -S {{ mariadb_socket }} -u root -e
+    #     "SELECT plugin from mysql.user WHERE user = 'root'"
+    #   register: plugin_root_result
+    #   changed_when: plugin_root_result.stdout is search('unix_socket')
+    #   when: root_pwd_check.rc == 0
+    #   tags: mysql
+
+    # - name: Remove unix_socket plugin if previously set
+    #   command: >
+    #     mysql -S {{ mariadb_socket }} -u root -e
+    #     "UPDATE mysql.user SET plugin = '' WHERE user = 'root'; FLUSH PRIVILEGES;"
+    #   when:
+    #     - root_pwd_check.rc == 0
+    #     - plugin_root_result.stdout is search('unix_socket')
+    #   tags: mariadb
+
+
+    - name: Removes all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Removes the MySQL test database
+      mysql_db:
+        name: test
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+  # PHP Info Page
+    - name: Sets Up PHP Info Page
+      template:
+        src: "files/info.php.j2"
+        dest: "/var/www/{{ http_host }}/info.php"
+
+  handlers:
+    - name: Reload Apache
+      service:
+        name: apache2
+        state: reloaded
+      when: http_server == "apache2"
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+      when: http_server == "apache2"
+
+    - name: Installation of useful packages
+      apt:
+        state: latest
+      when: http_server == "apache2"
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: latest
+      when: http_server == "nginx"
+
+
+    - name: Start nginx
+      service:
+        name: nginx
+        state: started
+      when: http_server == "nginx"
+
+    - name: check status of apache2
+      service:
+        name: apache2
+        state: stopped
+      register: apache2_status
+      when: http_server == "nginx"
+
+    - name: Print apache2 service status
+      debug:
+          msg: "apache2 service is {{ 'started' if apache2_status.status == 'started' else 'stopped' }}"
+      when: http_server == "nginx"

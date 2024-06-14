@@ -1,0 +1,8 @@
+- name: install php
+  hosts: localhost
+  become: true
+  tasks:
+   - name: install php
+     apt:
+      name: php
+      state: present

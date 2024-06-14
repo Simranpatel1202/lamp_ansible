@@ -1,0 +1,157 @@
+---
+- hosts: all
+  become: yes
+  vars_files:
+    - vars/default.yml
+  tasks:
+    - name: "Install prerequisites"
+      apt: 
+        name: '{{ item }}'
+        state: latest
+      loop: 
+        - aptitude
+
+
+  #Apache Configuration
+    
+    - name: Install LAMP Packages
+      apt: 
+        name: "{{ item }}" 
+        state: latest
+      loop: 
+        - mysql-server 
+        - php 
+        - php-mysql
+
+    - name: check status of nginx
+      service:
+        name: nginx
+        state: stopped
+      register: nginx_status
+      when: http_server == "apache2"
+
+    - name: Print nginx service status
+      debug:
+          msg: "nginx service is {{ 'started' if nginx_status.status == 'started' else 'stopped' }}"
+      when: http_server == "apache2"
+
+    - name: Install LAMP Packages
+      apt: 
+        name: "{{ item }}" 
+        state: latest
+      loop:
+        - apache2
+      when: http_server == "apache2"
+
+    - name: Install pyMySQL
+      pip:
+        name: pymysql
+        state: present
+      ignore_errors: True
+
+
+    - name: Create document root
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: '0755'
+      
+    - name: Set up Apache virtualhost
+      template:
+        src: "files/apache.conf.j2"
+        dest: "/etc/apache2/sites-available/{{ http_conf }}"
+      notify: Reload Apache
+      when: http_server == "apache2"
+
+    - name: Enable new site
+      shell: /usr/sbin/a2ensite {{ http_conf }}
+      notify: Reload Apache
+      when: http_server == "apache2"
+
+    - name: Disable default Apache site
+      shell: /usr/sbin/a2dissite 000-default.conf
+      when: disable_default
+      notify: Reload Apache
+    
+
+  # MySQL Configuration
+    - name: Sets the root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      ignore_errors: True
+    
+    - name: Set root user password
+      mysql_user:
+         name: admin
+         password: "{{ mysql_root_password }}"
+         check_implicit_admin: yes
+         login_user: root
+         login_password: "{{ mysql_root_password }}"
+         state: present
+
+    - name: Removes all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Removes the MySQL test database
+      mysql_db:
+        name: test
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+  # PHP Info Page
+    - name: Sets Up PHP Info Page
+      template:
+        src: "files/info.php.j2"
+        dest: "/var/www/{{ http_host }}/info.php"
+
+  handlers:
+    - name: Reload Apache
+      service:
+        name: apache2
+        state: reloaded
+      when: http_server == "apache2"
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+      when: http_server == "apache2"
+
+    - name: Installation of useful packages
+      apt:
+        state: latest
+      when: http_server == "apache2"
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: latest
+      when: http_server == "nginx"
+
+
+    - name: Start nginx
+      service:
+        name: nginx
+        state: started
+      when: http_server == "nginx"
+
+    - name: check status of apache2
+      service:
+        name: apache2
+        state: stopped
+      register: apache2_status
+      when: http_server == "nginx"
+
+    - name: Print apache2 service status
+      debug:
+          msg: "apache2 service is {{ 'started' if apache2_status.status == 'started' else 'stopped' }}"
+      when: http_server == "nginx"

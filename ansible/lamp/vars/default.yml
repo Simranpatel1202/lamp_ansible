@@ -1,0 +1,9 @@
+---
+app_user: "simran"
+http_host: "simran.com"
+http_conf: "simran.conf"
+http_port: "80"
+disable_default: true
+mysql_root_password: "root122"
+http_server: "apache2"
+
